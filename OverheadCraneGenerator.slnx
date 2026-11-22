@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="E:/CraneGenerator/OverheadCraneGenerator/CraneGenerator.Application/CraneGenerator.Application.csproj" Id="9f0409c3-b03e-47ec-8b2d-1fd66c8f94a9" />
+  <Project Path="E:/CraneGenerator/OverheadCraneGenerator/CraneGenerator.Domain/CraneGenerator.Domain.csproj" Id="b31cc353-e8f6-40fb-9ef2-dca1ec2cb649" />
+  <Project Path="E:/CraneGenerator/OverheadCraneGenerator/CraneGenerator.Infrastructure/CraneGenerator.Infrastructure.csproj" Id="a453a5d4-76ea-447b-b52a-43604e76c98c" />
+  <Project Path="E:/CraneGenerator/OverheadCraneGenerator/CraneGenerator.Tests/CraneGenerator.Tests.csproj" Id="fc27d365-17f8-48df-99c4-6e0aadc2137b" />
+  <Project Path="E:/CraneGenerator/OverheadCraneGenerator/OverheadCraneGenerator/OverheadCraneGenerator.csproj" />
+</Solution>
