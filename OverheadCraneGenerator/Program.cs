@@ -1,5 +1,6 @@
 using CraneGenerator.Application.Drawing;
 using CraneGenerator.Application.CraneModels;
+using CraneGenerator.Application.Calculations;
 using CraneGenerator.Application.Services;
 using CraneGenerator.Infrastructure.Data;
 using CraneGenerator.Infrastructure.Repositories;
@@ -35,6 +36,7 @@ builder.Services.AddDbContext<CraneDbContext>(options =>
 // Add services to the container.
 builder.Services.AddScoped<IDesignRepository, DesignRepository>();
 builder.Services.AddScoped<IDesignService, DesignService>();
+builder.Services.AddScoped<ICraneCalculationService, CraneCalculationService>();
 builder.Services.AddScoped<ICraneDrawingService, CraneDrawingService>();
 builder.Services.AddScoped<SingleGirderEotGenerator>();
 builder.Services.AddScoped<DoubleGirderEotGenerator>();

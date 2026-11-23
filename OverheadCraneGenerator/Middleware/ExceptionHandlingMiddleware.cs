@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using CraneGenerator.Application.Validation;
+using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
 namespace OverheadCraneGenerator.Middleware
@@ -22,36 +23,61 @@ namespace OverheadCraneGenerator.Middleware
             {
                 await _next(context);
             }
+            catch (DesignValidationException exception)
+            {
+                await WriteProblemDetailsAsync(
+                    context,
+                    StatusCodes.Status400BadRequest,
+                    "Design validation failed.",
+                    exception.Errors);
+            }
+            catch (ArgumentException exception)
+            {
+                await WriteProblemDetailsAsync(
+                    context,
+                    StatusCodes.Status400BadRequest,
+                    exception.Message,
+                    [exception.Message]);
+            }
             catch (Exception exception)
             {
                 _logger.LogError(
                     exception,
                     "Unhandled exception occurred.");
 
-                await HandleExceptionAsync(
+                await WriteProblemDetailsAsync(
                     context,
-                    exception);
+                    StatusCodes.Status500InternalServerError,
+                    "An unexpected error occurred.");
             }
         }
 
-        private static async Task HandleExceptionAsync(
+        private static async Task WriteProblemDetailsAsync(
             HttpContext context,
-            Exception exception)
+            int statusCode,
+            string title,
+            IEnumerable<string>? errors = null)
         {
-            context.Response.ContentType =
-                "application/json";
+            if (context.Response.HasStarted)
+                return;
 
-            context.Response.StatusCode =
-                (int)HttpStatusCode.InternalServerError;
+            context.Response.ContentType = "application/problem+json";
+            context.Response.StatusCode = statusCode;
 
-            var response = new
+            var problem = new ProblemDetails
             {
-                statusCode = context.Response.StatusCode,
-                message = "An unexpected error occurred."
+                Status = statusCode,
+                Title = title,
+                Detail = statusCode == StatusCodes.Status500InternalServerError
+                    ? "The request could not be completed."
+                    : title,
+                Instance = context.Request.Path
             };
 
-            await context.Response.WriteAsync(
-                JsonSerializer.Serialize(response));
+            if (errors is not null)
+                problem.Extensions["errors"] = errors;
+
+            await context.Response.WriteAsync(JsonSerializer.Serialize(problem));
         }
     }
 }

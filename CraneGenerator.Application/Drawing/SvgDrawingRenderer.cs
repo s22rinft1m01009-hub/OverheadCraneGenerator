@@ -271,7 +271,7 @@ namespace CraneGenerator.Application.Drawing
             const double x = 800;
             const double y = 50;
             const double width = 300;
-            const double height = 280;
+            const double height = 320;
 
             svg.AppendLine($"""
         <rect x="{x}"
@@ -293,6 +293,9 @@ namespace CraneGenerator.Application.Drawing
                 true);
 
             var rowY = y + 55;
+
+            AddTechnicalRow(svg, x, ref rowY, "Design", data.DesignName);
+            AddTechnicalRow(svg, x, ref rowY, "Crane Type", data.CraneType);
 
             AddTechnicalRow(
                 svg,

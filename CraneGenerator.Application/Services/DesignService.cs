@@ -1,7 +1,7 @@
-﻿using AutoMapper;
-using CraneGenerator.Application.DTOs;
+﻿using CraneGenerator.Application.DTOs;
 using CraneGenerator.Domain.Entities;
 using CraneGenerator.Infrastructure.Repositories;
+using CraneGenerator.Application.Validation;
 using CraneGenerator.Domain.Enums;
 
 namespace CraneGenerator.Application.Services
@@ -9,11 +9,9 @@ namespace CraneGenerator.Application.Services
     public class DesignService : IDesignService
     {
         private readonly IDesignRepository _repository;
-        private readonly IMapper _mapper;
-        public DesignService(IDesignRepository repository, IMapper mapper)
+        public DesignService(IDesignRepository repository)
         {
             _repository = repository;
-            _mapper = mapper;
         }
 
         public async Task<List<DesignResponse>> GetAllAsync()
@@ -35,14 +33,14 @@ namespace CraneGenerator.Application.Services
         public async Task<DesignResponse> CreateAsync(
             CreateDesignRequest request)
         {
-            Validate(request);
+            var normalizedCraneType = DesignValidator.ValidateAndNormalize(request);
 
             var now = DateTime.UtcNow;
 
             var design = new CraneDesign
             {
                 DesignName = request.DesignName.Trim(),
-                CraneType = CraneTypeNormalizer.Normalize(request.CraneType),
+                CraneType = normalizedCraneType,
                 CapacityTonnes = request.CapacityTonnes,
                 SpanMm = request.SpanMm,
                 LiftHeightMm = request.LiftHeightMm,
@@ -62,7 +60,7 @@ namespace CraneGenerator.Application.Services
             int id,
             UpdateDesignRequest request)
         {
-            Validate(request);
+            var normalizedCraneType = DesignValidator.ValidateAndNormalize(request);
 
             var design = await _repository.GetByIdAsync(id);
 
@@ -72,7 +70,7 @@ namespace CraneGenerator.Application.Services
             }
 
             design.DesignName = request.DesignName.Trim();
-            design.CraneType = CraneTypeNormalizer.Normalize(request.CraneType);
+            design.CraneType = normalizedCraneType;
             design.CapacityTonnes = request.CapacityTonnes;
             design.SpanMm = request.SpanMm;
             design.LiftHeightMm = request.LiftHeightMm;
@@ -98,72 +96,6 @@ namespace CraneGenerator.Application.Services
             await _repository.DeleteAsync(design);
 
             return true;
-        }
-
-        private static void Validate(CreateDesignRequest request)
-        {
-            if (string.IsNullOrWhiteSpace(request.DesignName))
-                throw new ArgumentException("Design name is required.");
-
-            if (request.CapacityTonnes <= 0)
-                throw new ArgumentException(
-                    "Capacity must be greater than zero.");
-
-            if (request.SpanMm <= 0)
-                throw new ArgumentException(
-                    "Span must be greater than zero.");
-
-            if (request.LiftHeightMm <= 0)
-                throw new ArgumentException(
-                    "Lift height must be greater than zero.");
-
-            if (request.RunwayWidthMm <= 0)
-                throw new ArgumentException(
-                    "Runway width must be greater than zero.");
-
-            if (request.BuildingHeightMm < 0)
-                throw new ArgumentException(
-                    "Building height cannot be negative.");
-
-            if (request.HoistPositionMm < 0 ||
-                request.HoistPositionMm > request.SpanMm)
-            {
-                throw new ArgumentException(
-                    "Hoist position must be between 0 and the span.");
-            }
-        }
-
-        private static void Validate(UpdateDesignRequest request)
-        {
-            if (string.IsNullOrWhiteSpace(request.DesignName))
-                throw new ArgumentException("Design name is required.");
-
-            if (request.CapacityTonnes <= 0)
-                throw new ArgumentException(
-                    "Capacity must be greater than zero.");
-
-            if (request.SpanMm <= 0)
-                throw new ArgumentException(
-                    "Span must be greater than zero.");
-
-            if (request.LiftHeightMm <= 0)
-                throw new ArgumentException(
-                    "Lift height must be greater than zero.");
-
-            if (request.RunwayWidthMm <= 0)
-                throw new ArgumentException(
-                    "Runway width must be greater than zero.");
-
-            if (request.BuildingHeightMm < 0)
-                throw new ArgumentException(
-                    "Building height cannot be negative.");
-
-            if (request.HoistPositionMm < 0 ||
-                request.HoistPositionMm > request.SpanMm)
-            {
-                throw new ArgumentException(
-                    "Hoist position must be between 0 and the span.");
-            }
         }
 
         private static DesignResponse MapToResponse(CraneDesign design)
