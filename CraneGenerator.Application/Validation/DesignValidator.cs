@@ -63,7 +63,7 @@ public static class DesignValidator
         RequireFinitePositive(liftHeightMm, "LiftHeightMm", errors);
         RequireFiniteNonNegative(runwayWidthMm, "RunwayWidthMm", errors);
         RequireFiniteNonNegative(hoistPositionMm, "HoistPositionMm", errors);
-        RequireFinitePositive(buildingHeightMm, "BuildingHeightMm", errors);
+        RequireFiniteNonNegative(buildingHeightMm, "BuildingHeightMm", errors);
 
         if (spanMm > 0 && hoistPositionMm > spanMm)
             errors.Add("HoistPositionMm must be less than or equal to SpanMm.");
@@ -72,6 +72,12 @@ public static class DesignValidator
             && runwayWidthMm <= 0)
         {
             errors.Add("RunwayWidthMm must be greater than zero for EOT cranes.");
+        }
+
+        if (normalizedCraneType is CraneTypeNormalizer.SingleGirderEot or CraneTypeNormalizer.DoubleGirderEot
+            && buildingHeightMm <= 0)
+        {
+            errors.Add("BuildingHeightMm must be greater than zero for EOT cranes.");
         }
 
         if (errors.Count > 0)

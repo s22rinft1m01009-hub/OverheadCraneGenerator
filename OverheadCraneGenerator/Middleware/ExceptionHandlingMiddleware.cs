@@ -1,5 +1,6 @@
 ﻿using CraneGenerator.Application.Validation;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace OverheadCraneGenerator.Middleware
@@ -38,6 +39,14 @@ namespace OverheadCraneGenerator.Middleware
                     StatusCodes.Status400BadRequest,
                     exception.Message,
                     [exception.Message]);
+            }
+            catch (DbUpdateConcurrencyException exception)
+            {
+                _logger.LogInformation(exception, "A concurrent database update prevented the request.");
+                await WriteProblemDetailsAsync(
+                    context,
+                    StatusCodes.Status409Conflict,
+                    "The resource was changed by another request.");
             }
             catch (Exception exception)
             {

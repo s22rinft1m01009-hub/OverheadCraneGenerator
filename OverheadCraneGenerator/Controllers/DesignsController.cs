@@ -1,10 +1,10 @@
 ﻿using CraneGenerator.Application.Drawing;
+using CraneGenerator.Application.Drawing.Pdf;
 using CraneGenerator.Application.DTOs;
 using CraneGenerator.Application.Services;
 using CraneGenerator.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace OverheadCraneGenerator.Controllers
 {
@@ -15,11 +15,18 @@ namespace OverheadCraneGenerator.Controllers
         private readonly IDesignService _service;
         private readonly ICraneDrawingService _drawingService;
         private readonly SvgDrawingRenderer _svgDrawingRenderer;
-        public DesignsController(IDesignService service, ICraneDrawingService drawingService = null, SvgDrawingRenderer svgDrawingRenderer = null)
+        private readonly IPdfDrawingRenderer _pdfDrawingRenderer;
+
+        public DesignsController(
+            IDesignService service,
+            ICraneDrawingService drawingService,
+            SvgDrawingRenderer svgDrawingRenderer,
+            IPdfDrawingRenderer pdfDrawingRenderer)
         {
             _service = service;
             _drawingService = drawingService;
             _svgDrawingRenderer = svgDrawingRenderer;
+            _pdfDrawingRenderer = pdfDrawingRenderer;
         }
 
         [HttpGet("getall")]
@@ -110,6 +117,22 @@ namespace OverheadCraneGenerator.Controllers
             var svg = _svgDrawingRenderer.Render(drawing);
 
             return Content(svg, "image/svg+xml");
+        }
+
+        [HttpGet("{id:int}/drawing/pdf")]
+        public async Task<IActionResult> GeneratePdf(int id)
+        {
+            var design = await _service.GetByIdAsync(id);
+            if (design == null)
+                return NotFound();
+
+            var drawing = _drawingService.Generate(design);
+            var pdf = _pdfDrawingRenderer.Render(drawing);
+            var safeName = string.Concat(design.DesignName.Select(character =>
+                Path.GetInvalidFileNameChars().Contains(character) ? '-' : character));
+            var fileName = $"{safeName}-Drawing.pdf";
+
+            return File(pdf, "application/pdf", fileName);
         }
     }
 }

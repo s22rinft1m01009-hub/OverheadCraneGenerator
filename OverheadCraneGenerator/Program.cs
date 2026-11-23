@@ -1,4 +1,6 @@
 using CraneGenerator.Application.Drawing;
+using CraneGenerator.Application.Drawing.Pdf;
+using CraneGenerator.Application.Drawing.Pdf.Fonts;
 using CraneGenerator.Application.CraneModels;
 using CraneGenerator.Application.Calculations;
 using CraneGenerator.Application.Services;
@@ -10,6 +12,8 @@ using Microsoft.OpenApi;
 using OverheadCraneGenerator.Middleware;
 using OverheadCraneGenerator.Shared;
 using Scalar.AspNetCore;
+
+CraneFontResolver.Register();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,6 +47,7 @@ builder.Services.AddScoped<DoubleGirderEotGenerator>();
 builder.Services.AddScoped<GantryGenerator>();
 builder.Services.AddScoped<CraneDrawingFactory>();
 builder.Services.AddScoped<SvgDrawingRenderer>();
+builder.Services.AddScoped<IPdfDrawingRenderer, PdfDrawingRenderer>();
 
 
 
@@ -66,6 +71,8 @@ if (app.Environment.IsDevelopment())
         
     });
 }
+
+//public partial class Program;
 
 app.UseHttpsRedirection();
 app.UseAuthorization();

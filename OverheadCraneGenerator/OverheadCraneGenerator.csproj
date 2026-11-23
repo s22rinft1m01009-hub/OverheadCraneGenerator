@@ -27,7 +27,6 @@
     <ProjectReference Include="..\CraneGenerator.Application\CraneGenerator.Application.csproj" />
     <ProjectReference Include="..\CraneGenerator.Domain\CraneGenerator.Domain.csproj" />
     <ProjectReference Include="..\CraneGenerator.Infrastructure\CraneGenerator.Infrastructure.csproj" />
-    <ProjectReference Include="..\CraneGenerator.Tests\CraneGenerator.Tests.csproj" />
   </ItemGroup>
 
 </Project>
