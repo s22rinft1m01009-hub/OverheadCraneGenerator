@@ -2,6 +2,7 @@
 using CraneGenerator.Application.DTOs;
 using CraneGenerator.Domain.Entities;
 using CraneGenerator.Infrastructure.Repositories;
+using CraneGenerator.Domain.Enums;
 
 namespace CraneGenerator.Application.Services
 {
@@ -41,7 +42,7 @@ namespace CraneGenerator.Application.Services
             var design = new CraneDesign
             {
                 DesignName = request.DesignName.Trim(),
-                CraneType = request.CraneType.Trim(),
+                CraneType = CraneTypeNormalizer.Normalize(request.CraneType),
                 CapacityTonnes = request.CapacityTonnes,
                 SpanMm = request.SpanMm,
                 LiftHeightMm = request.LiftHeightMm,
@@ -71,7 +72,7 @@ namespace CraneGenerator.Application.Services
             }
 
             design.DesignName = request.DesignName.Trim();
-            design.CraneType = request.CraneType.Trim();
+            design.CraneType = CraneTypeNormalizer.Normalize(request.CraneType);
             design.CapacityTonnes = request.CapacityTonnes;
             design.SpanMm = request.SpanMm;
             design.LiftHeightMm = request.LiftHeightMm;
@@ -120,9 +121,9 @@ namespace CraneGenerator.Application.Services
                 throw new ArgumentException(
                     "Runway width must be greater than zero.");
 
-            if (request.BuildingHeightMm <= 0)
+            if (request.BuildingHeightMm < 0)
                 throw new ArgumentException(
-                    "Building height must be greater than zero.");
+                    "Building height cannot be negative.");
 
             if (request.HoistPositionMm < 0 ||
                 request.HoistPositionMm > request.SpanMm)
@@ -153,9 +154,9 @@ namespace CraneGenerator.Application.Services
                 throw new ArgumentException(
                     "Runway width must be greater than zero.");
 
-            if (request.BuildingHeightMm <= 0)
+            if (request.BuildingHeightMm < 0)
                 throw new ArgumentException(
-                    "Building height must be greater than zero.");
+                    "Building height cannot be negative.");
 
             if (request.HoistPositionMm < 0 ||
                 request.HoistPositionMm > request.SpanMm)
@@ -171,7 +172,7 @@ namespace CraneGenerator.Application.Services
             {
                 Id = design.Id,
                 DesignName = design.DesignName,
-                CraneType = design.CraneType,
+                CraneType = CraneTypeNormalizer.Normalize(design.CraneType),
                 CapacityTonnes = design.CapacityTonnes,
                 SpanMm = design.SpanMm,
                 LiftHeightMm = design.LiftHeightMm,

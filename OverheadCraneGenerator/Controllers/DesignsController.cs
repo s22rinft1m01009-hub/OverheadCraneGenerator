@@ -1,5 +1,7 @@
-﻿using CraneGenerator.Application.DTOs;
+﻿using CraneGenerator.Application.Drawing;
+using CraneGenerator.Application.DTOs;
 using CraneGenerator.Application.Services;
+using CraneGenerator.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
@@ -11,10 +13,13 @@ namespace OverheadCraneGenerator.Controllers
     public class DesignsController : AppBaseController
     {
         private readonly IDesignService _service;
-
-        public DesignsController(IDesignService service)
+        private readonly ICraneDrawingService _drawingService;
+        private readonly SvgDrawingRenderer _svgDrawingRenderer;
+        public DesignsController(IDesignService service, ICraneDrawingService drawingService = null, SvgDrawingRenderer svgDrawingRenderer = null)
         {
             _service = service;
+            _drawingService = drawingService;
+            _svgDrawingRenderer = svgDrawingRenderer;
         }
 
         [HttpGet("getall")]
@@ -63,7 +68,7 @@ namespace OverheadCraneGenerator.Controllers
                 return NotFound("Id is dose not Exist in Table");
             }
             return Success(updated, "Data Add succesfully");
-            
+
         }
 
         [HttpDelete("{id:int}")]
@@ -77,6 +82,34 @@ namespace OverheadCraneGenerator.Controllers
             }
 
             return Success("", "Data Delete succesfully");
+        }
+        [HttpPost("{id:int}/generate")]
+        public async Task<ActionResult<DrawingModel>> GenerateDrawing(int id)
+        {
+            var design = await _service.GetByIdAsync(id);
+
+            if (design == null)
+            {
+                return NotFound();
+            }
+
+            var drawing = _drawingService.Generate(design);
+
+            return Ok(drawing);
+        }
+        [HttpGet("{id:int}/drawing/svg")]
+        public async Task<IActionResult> GenerateSvg(int id)
+        {
+            var design = await _service.GetByIdAsync(id);
+
+            if (design == null)
+                return NotFound();
+
+            var drawing = _drawingService.Generate(design);
+
+            var svg = _svgDrawingRenderer.Render(drawing);
+
+            return Content(svg, "image/svg+xml");
         }
     }
 }
