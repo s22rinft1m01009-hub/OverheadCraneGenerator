@@ -2,12 +2,13 @@
 using CraneGenerator.Application.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace OverheadCraneGenerator.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class DesignsController : ControllerBase
+    public class DesignsController : AppBaseController
     {
         private readonly IDesignService _service;
 
@@ -16,16 +17,16 @@ namespace OverheadCraneGenerator.Controllers
             _service = service;
         }
 
-        [HttpGet]
-        public async Task<ActionResult<List<DesignResponse>>> GetAll()
+        [HttpGet("getall")]
+        public async Task<IActionResult> GetAll()
         {
             var designs = await _service.GetAllAsync();
 
-            return Ok(designs);
+            return Success(designs, "Designs retrieved successfully");
         }
 
         [HttpGet("{id:int}")]
-        public async Task<ActionResult<DesignResponse>> GetById(int id)
+        public async Task<IActionResult> GetById(int id)
         {
             var design = await _service.GetByIdAsync(id);
 
@@ -34,19 +35,20 @@ namespace OverheadCraneGenerator.Controllers
                 return NotFound();
             }
 
-            return Ok(design);
+            return Success(design, "Data Reterive succesfully");
         }
 
         [HttpPost]
-        public async Task<ActionResult<DesignResponse>> Create(
+        public async Task<IActionResult> Create(
             CreateDesignRequest request)
         {
             var design = await _service.CreateAsync(request);
 
-            return CreatedAtAction(
-                nameof(GetById),
-                new { id = design.Id },
-                design);
+            return Success(design, "Data Add succesfully");
+            //return CreatedAtAction(
+            //    nameof(GetById),
+            //    new { id = design.Id },
+            //    design);
         }
 
         [HttpPut("{id:int}")]
@@ -58,10 +60,10 @@ namespace OverheadCraneGenerator.Controllers
 
             if (!updated)
             {
-                return NotFound();
+                return NotFound("Id is dose not Exist in Table");
             }
-
-            return NoContent();
+            return Success(updated, "Data Add succesfully");
+            
         }
 
         [HttpDelete("{id:int}")]
@@ -71,10 +73,10 @@ namespace OverheadCraneGenerator.Controllers
 
             if (!deleted)
             {
-                return NotFound();
+                return NotFound("Id is dose not Exist in Table");
             }
 
-            return NoContent();
+            return Success("", "Data Delete succesfully");
         }
     }
 }
