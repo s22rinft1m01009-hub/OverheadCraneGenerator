@@ -14,6 +14,12 @@ public sealed class CraneDrawingFactory
         SingleGirderEotGenerator singleGirderEotGenerator,
         DoubleGirderEotGenerator doubleGirderEotGenerator,
         GantryGenerator gantryGenerator,
+        JibCraneGenerator jibCraneGenerator,
+        MonorailGenerator monorailGenerator,
+        WallMountedJibGenerator wallMountedJibGenerator,
+        PortableGantryGenerator portableGantryGenerator,
+        SemiGantryGenerator semiGantryGenerator,
+        UnderslungGenerator underslungGenerator,
         ICraneCalculationService calculationService)
     {
         _calculationService = calculationService;
@@ -21,7 +27,13 @@ public sealed class CraneDrawingFactory
         {
             [CraneType.SingleGirderEot] = singleGirderEotGenerator,
             [CraneType.DoubleGirderEot] = doubleGirderEotGenerator,
-            [CraneType.Gantry] = gantryGenerator
+            [CraneType.Gantry] = gantryGenerator,
+            [CraneType.JibCrane] = jibCraneGenerator,
+            [CraneType.Monorail] = monorailGenerator,
+            [CraneType.WallMountedJib] = wallMountedJibGenerator,
+            [CraneType.PortableGantry] = portableGantryGenerator,
+            [CraneType.SemiGantry] = semiGantryGenerator,
+            [CraneType.Underslung] = underslungGenerator
         };
     }
 

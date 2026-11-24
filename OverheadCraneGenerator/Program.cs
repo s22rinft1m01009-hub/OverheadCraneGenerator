@@ -12,12 +12,19 @@ using Microsoft.OpenApi;
 using OverheadCraneGenerator.Middleware;
 using OverheadCraneGenerator.Shared;
 using Scalar.AspNetCore;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 CraneFontResolver.Register();
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    });
 
 builder.Services.AddAutoMapper(cfg => { }, typeof(DesignMappingProfile));
 
@@ -30,13 +37,6 @@ builder.Services.AddDbContext<CraneDbContext>(options =>
     options.UseSqlite(
         builder.Configuration.GetConnectionString("DefaultConnection")));
 
-
-
-
-
-
-
-
 // Add services to the container.
 builder.Services.AddScoped<IDesignRepository, DesignRepository>();
 builder.Services.AddScoped<IDesignService, DesignService>();
@@ -45,17 +45,15 @@ builder.Services.AddScoped<ICraneDrawingService, CraneDrawingService>();
 builder.Services.AddScoped<SingleGirderEotGenerator>();
 builder.Services.AddScoped<DoubleGirderEotGenerator>();
 builder.Services.AddScoped<GantryGenerator>();
+builder.Services.AddScoped<JibCraneGenerator>();
+builder.Services.AddScoped<MonorailGenerator>();
+builder.Services.AddScoped<WallMountedJibGenerator>();
+builder.Services.AddScoped<PortableGantryGenerator>();
+builder.Services.AddScoped<SemiGantryGenerator>();
+builder.Services.AddScoped<UnderslungGenerator>();
 builder.Services.AddScoped<CraneDrawingFactory>();
 builder.Services.AddScoped<SvgDrawingRenderer>();
 builder.Services.AddScoped<IPdfDrawingRenderer, PdfDrawingRenderer>();
-
-
-
-
-
-
-
-
 
 var app = builder.Build();
 
@@ -68,15 +66,19 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference(options =>
     {
         options.WithPreferredScheme("Bearer");
-        
     });
 }
-
-//public partial class Program;
 
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<CraneDbContext>();
+    db.Database.EnsureCreated();
+}
+
 app.Run();
 
 public class BearerSecuritySchemeTransformer : IOpenApiDocumentTransformer
@@ -85,7 +87,6 @@ public class BearerSecuritySchemeTransformer : IOpenApiDocumentTransformer
     {
         document.Components ??= new OpenApiComponents();
 
-       
         document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
         document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
         {
@@ -96,7 +97,6 @@ public class BearerSecuritySchemeTransformer : IOpenApiDocumentTransformer
             Description = "Enter your JWT token"
         };
 
-        
         document.Security ??= new List<OpenApiSecurityRequirement>();
         document.Security.Add(new OpenApiSecurityRequirement
         {
@@ -106,3 +106,5 @@ public class BearerSecuritySchemeTransformer : IOpenApiDocumentTransformer
         return Task.CompletedTask;
     }
 }
+
+public partial class Program { }

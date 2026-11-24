@@ -63,7 +63,7 @@ public sealed class DesignValidationTests
     public void UnsupportedCraneTypeIsRejected()
     {
         var request = ValidRequest();
-        request.CraneType = "JIB";
+        request.CraneType = "INVALID_CRANE_TYPE";
 
         Assert.Throws<DesignValidationException>(() => DesignValidator.ValidateAndNormalize(request));
     }

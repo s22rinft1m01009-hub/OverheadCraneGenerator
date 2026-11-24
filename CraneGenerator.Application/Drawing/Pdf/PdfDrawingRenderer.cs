@@ -1,6 +1,10 @@
 using CraneGenerator.Domain.Entities;
+using PdfSharp;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf;
+using System;
+using System.IO;
+using System.Linq;
 
 namespace CraneGenerator.Application.Drawing.Pdf;
 
@@ -8,18 +12,21 @@ public sealed class PdfDrawingRenderer : IPdfDrawingRenderer
 {
     private const double CanvasWidth = 1200;
     private const double CanvasHeight = 800;
-    private const double Margin = 24;
+    private const double Margin = 20;
 
     public byte[] Render(DrawingModel model)
     {
         ArgumentNullException.ThrowIfNull(model);
+        PdfSharpLicense.SetAgplLicense();
 
         using var document = new PdfDocument();
         document.Info.Title = model.Title;
         document.Info.Subject = model.TechnicalData.DesignName;
+        document.Info.Author = "CraneGenerator CAD System";
+
         var page = document.AddPage();
-        page.Size = PdfSharp.PageSize.A3;
-        page.Orientation = PdfSharp.PageOrientation.Landscape;
+        page.Size = PageSize.A3;
+        page.Orientation = PageOrientation.Landscape;
 
         using (var graphics = XGraphics.FromPdfPage(page))
         {
@@ -36,26 +43,54 @@ public sealed class PdfDrawingRenderer : IPdfDrawingRenderer
                 return new XRect(point.X, point.Y, width * scale, height * scale);
             }
 
-            var borderPen = new XPen(XColors.Black, 1.2);
-            graphics.DrawRectangle(borderPen, MapRect(0, 0, CanvasWidth, CanvasHeight));
-            DrawText(graphics, model.Title, Map(600, 25), 18 * scale, XStringFormats.TopCenter, true);
-
+            // 1. Drawing Views (dashed view boundary boxes & view headers)
             foreach (var view in model.Views)
             {
                 var rect = MapRect(view.X, view.Y, view.Width, view.Height);
-                var dashedPen = new XPen(XColors.Gray, 0.6) { DashStyle = XDashStyle.Dash };
+                var dashedPen = new XPen(XColor.FromArgb(149, 165, 166), 0.7 * scale)
+                {
+                    DashStyle = XDashStyle.Dash
+                };
                 graphics.DrawRectangle(dashedPen, rect);
-                DrawText(graphics, view.Name, Map(view.X, view.Y - 4), 12 * scale, XStringFormats.BottomLeft, true);
+
+                var scaleText = !string.IsNullOrEmpty(view.Scale) && view.Scale != "NTS" ? $" ({view.Scale})" : "";
+                DrawText(graphics, $"{view.Name}{scaleText}", Map(view.X + 6, view.Y - 5), 10.5 * scale, XStringFormats.BottomLeft, true, XColor.FromArgb(26, 82, 118));
             }
 
+            // 2. Details (Detail Z, Runway Bay Diagram, Notes & End Stops)
+            foreach (var detail in model.Details)
+            {
+                // Detail boundary box
+                var dRect = MapRect(detail.X, detail.Y, detail.Width, detail.Height);
+                graphics.DrawRectangle(new XPen(XColors.Black, 1 * scale), XBrushes.White, dRect);
+
+                // Detail elements
+                foreach (var elem in detail.Elements)
+                {
+                    RenderElement(graphics, elem, Map, MapRect, scale);
+                }
+
+                // Detail dimensions
+                foreach (var dim in detail.Dimensions)
+                {
+                    RenderDimension(graphics, dim, Map, scale);
+                }
+            }
+
+            // 3. Technical Specifications Table
+            RenderTechnicalDataTable(graphics, model, Map, MapRect, scale);
+
+            // 4. Main Model Elements
             foreach (var element in model.Elements)
+            {
                 RenderElement(graphics, element, Map, MapRect, scale);
+            }
 
+            // 5. Main Model Dimensions
             foreach (var dimension in model.Dimensions)
+            {
                 RenderDimension(graphics, dimension, Map, scale);
-
-            RenderTechnicalData(graphics, model, Map, MapRect, scale);
-            RenderTitleBlock(graphics, model, Map, MapRect, scale);
+            }
         }
 
         using var output = new MemoryStream();
@@ -71,162 +106,274 @@ public sealed class PdfDrawingRenderer : IPdfDrawingRenderer
         double scale)
     {
         var pen = new XPen(ParseColor(element.Stroke), Math.Max(0.5, element.StrokeWidth * scale));
+
         switch (element)
         {
             case DrawingLine line:
                 graphics.DrawLine(pen, map(line.X1, line.Y1), map(line.X2, line.Y2));
                 break;
-            case DrawingRectangle rectangle:
-                var rect = mapRect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
-                if (TryParseFill(rectangle.Fill, out var rectangleBrush))
-                    graphics.DrawRectangle(pen, rectangleBrush, rect);
+
+            case DrawingRectangle rect:
+                var r = mapRect(rect.X, rect.Y, rect.Width, rect.Height);
+                if (TryParseFill(rect.Fill, out var rectBrush))
+                    graphics.DrawRectangle(pen, rectBrush, r);
                 else
-                    graphics.DrawRectangle(pen, rect);
+                    graphics.DrawRectangle(pen, r);
                 break;
+
             case DrawingCircle circle:
                 var center = map(circle.CenterX, circle.CenterY);
-                var diameter = circle.Radius * 2 * scale;
-                var circleRect = new XRect(center.X - diameter / 2, center.Y - diameter / 2, diameter, diameter);
+                var dia = circle.Radius * 2 * scale;
+                var cRect = new XRect(center.X - dia / 2, center.Y - dia / 2, dia, dia);
                 if (TryParseFill(circle.Fill, out var circleBrush))
-                    graphics.DrawEllipse(pen, circleBrush, circleRect);
+                    graphics.DrawEllipse(pen, circleBrush, cRect);
                 else
-                    graphics.DrawEllipse(pen, circleRect);
+                    graphics.DrawEllipse(pen, cRect);
+                break;
+
+            case DrawingPolyline polyline:
+                if (polyline.Points.Count < 2)
+                    break;
+                var pts = polyline.Points.Select(p => map(p.X, p.Y)).ToArray();
+                graphics.DrawLines(pen, pts);
+                if (polyline.IsClosed && polyline.Points.Count >= 3)
+                    graphics.DrawLine(pen, pts[^1], pts[0]);
+                break;
+
+            case DrawingArc arc:
+                RenderArc(graphics, arc, map, scale);
+                break;
+
+            case DrawingText text:
+                RenderTextElement(graphics, text, map, scale);
+                break;
+
+            case DrawingCenterline centerline:
+                var dashedPen = new XPen(ParseColor(centerline.Stroke), Math.Max(0.5, centerline.StrokeWidth * scale))
+                {
+                    DashStyle = XDashStyle.DashDot
+                };
+                graphics.DrawLine(dashedPen, map(centerline.X1, centerline.Y1), map(centerline.X2, centerline.Y2));
                 break;
         }
+    }
+
+    private static void RenderArc(
+        XGraphics graphics,
+        DrawingArc arc,
+        Func<double, double, XPoint> map,
+        double scale)
+    {
+        var center = map(arc.CenterX, arc.CenterY);
+        var dia = arc.Radius * 2 * scale;
+        var arcRect = new XRect(center.X - dia / 2, center.Y - dia / 2, dia, dia);
+        var pen = new XPen(ParseColor(arc.Stroke), Math.Max(0.5, arc.StrokeWidth * scale))
+        {
+            DashStyle = XDashStyle.Dash
+        };
+
+        var sweep = arc.EndAngleDegrees - arc.StartAngleDegrees;
+        if (sweep < 0) sweep += 360;
+
+        if (Math.Abs(sweep - 360) < 0.1 || sweep <= 0)
+        {
+            graphics.DrawEllipse(pen, arcRect);
+            return;
+        }
+
+        graphics.DrawArc(pen, arcRect, arc.StartAngleDegrees, sweep);
+    }
+
+    private static void RenderTextElement(
+        XGraphics graphics,
+        DrawingText text,
+        Func<double, double, XPoint> map,
+        double scale)
+    {
+        var point = map(text.X, text.Y);
+        var fontSize = Math.Max(5.5, text.FontSize * scale);
+        var bold = text.FontWeight == "bold";
+
+        var format = text.TextAnchor switch
+        {
+            "middle" => XStringFormats.TopCenter,
+            "end" => XStringFormats.TopRight,
+            _ => XStringFormats.TopLeft
+        };
+
+        DrawText(graphics, text.Content, point, fontSize, format, bold, ParseColor(text.Fill));
     }
 
     private static void RenderDimension(
         XGraphics graphics,
-        DrawingDimension dimension,
+        DrawingDimension dim,
         Func<double, double, XPoint> map,
         double scale)
     {
-        var start = map(dimension.X1, dimension.Y1);
-        var end = map(dimension.X2, dimension.Y2);
-        var pen = new XPen(XColors.Black, Math.Max(0.45, scale));
+        var start = map(dim.X1, dim.Y1);
+        var end = map(dim.X2, dim.Y2);
+        var strokeColor = dim.IsReference ? XColor.FromArgb(80, 80, 80) : XColors.Black;
+        var pen = new XPen(strokeColor, Math.Max(0.45, 0.85 * scale));
+
+        // Dimension leader line
         graphics.DrawLine(pen, start, end);
 
-        var extension = 15 * scale;
-        graphics.DrawLine(pen, new XPoint(start.X, start.Y - extension), new XPoint(start.X, start.Y + extension));
-        graphics.DrawLine(pen, new XPoint(end.X, end.Y - extension), new XPoint(end.X, end.Y + extension));
+        // Extension lines
+        var isHoriz = Math.Abs(dim.Y2 - dim.Y1) < Math.Abs(dim.X2 - dim.X1);
+        var ext = Math.Max(6, (dim.Offset + 4) * scale);
+
+        if (isHoriz)
+        {
+            graphics.DrawLine(pen, new XPoint(start.X, start.Y - ext), new XPoint(start.X, start.Y + ext));
+            graphics.DrawLine(pen, new XPoint(end.X, end.Y - ext), new XPoint(end.X, end.Y + ext));
+        }
+        else
+        {
+            graphics.DrawLine(pen, new XPoint(start.X - ext, start.Y), new XPoint(start.X + ext, start.Y));
+            graphics.DrawLine(pen, new XPoint(end.X - ext, end.Y), new XPoint(end.X + ext, end.Y));
+        }
+
+        // Arrowheads
         DrawArrow(graphics, start, end, scale);
         DrawArrow(graphics, end, start, scale);
 
-        var labelX = (start.X + end.X) / 2;
-        var labelY = (start.Y + end.Y) / 2 - dimension.Offset * scale;
-        DrawText(graphics, dimension.Label, new XPoint(labelX, labelY), Math.Max(6, 11 * scale), XStringFormats.BottomCenter);
+        // Label
+        var midX = (start.X + end.X) / 2;
+        var midY = (start.Y + end.Y) / 2;
+
+        double lblX = midX;
+        double lblY = isHoriz ? midY - dim.Offset * scale : midY;
+        var fmt = isHoriz ? XStringFormats.BottomCenter : XStringFormats.CenterLeft;
+        if (!isHoriz)
+            lblX = midX + (dim.Offset + 2) * scale;
+
+        DrawText(graphics, dim.Label, new XPoint(lblX, lblY), Math.Max(5.5, 8.5 * scale), fmt, true, strokeColor);
     }
 
-    private static void DrawArrow(XGraphics graphics, XPoint point, XPoint target, double scale)
+    private static void DrawArrow(XGraphics graphics, XPoint from, XPoint target, double scale)
     {
-        var dx = target.X - point.X;
-        var dy = target.Y - point.Y;
-        var length = Math.Sqrt(dx * dx + dy * dy);
-        if (length <= double.Epsilon)
-            return;
+        var dx = target.X - from.X;
+        var dy = target.Y - from.Y;
+        var len = Math.Sqrt(dx * dx + dy * dy);
+        if (len <= 1e-4) return;
 
-        var ux = dx / length;
-        var uy = dy / length;
-        var arrowLength = 8 * scale;
-        var arrowWidth = 4 * scale;
-        var basePoint = new XPoint(point.X + ux * arrowLength, point.Y + uy * arrowLength);
-        var perpendicular = new XPoint(-uy, ux);
+        var ux = dx / len;
+        var uy = dy / len;
+        var arrowLen = 7 * scale;
+        var arrowW = 2.8 * scale;
+
+        var basePt = new XPoint(from.X + ux * arrowLen, from.Y + uy * arrowLen);
+        var perp = new XPoint(-uy, ux);
         var points = new[]
         {
-            point,
-            new XPoint(basePoint.X + perpendicular.X * arrowWidth, basePoint.Y + perpendicular.Y * arrowWidth),
-            new XPoint(basePoint.X - perpendicular.X * arrowWidth, basePoint.Y - perpendicular.Y * arrowWidth)
+            from,
+            new XPoint(basePt.X + perp.X * arrowW, basePt.Y + perp.Y * arrowW),
+            new XPoint(basePt.X - perp.X * arrowW, basePt.Y - perp.Y * arrowW)
         };
         graphics.DrawPolygon(XBrushes.Black, points, XFillMode.Winding);
     }
 
-    private static void RenderTechnicalData(
+    private static void RenderTechnicalDataTable(
         XGraphics graphics,
         DrawingModel model,
         Func<double, double, XPoint> map,
         Func<double, double, double, double, XRect> mapRect,
         double scale)
     {
-        const double x = 800;
-        const double y = 50;
-        const double width = 300;
-        const double height = 320;
-        graphics.DrawRectangle(XPens.Black, mapRect(x, y, width, height));
-        var row = y + 24;
-        DrawText(graphics, "TECHNICAL DATA", map(x + 10, row), 14 * scale, XStringFormats.TopLeft, true);
-        row += 30;
-        AddRow("Design", model.TechnicalData.DesignName);
-        AddRow("Crane Type", model.TechnicalData.CraneType);
-        AddRow("Capacity", $"{model.TechnicalData.CapacityTonnes:0.##} tonnes");
-        AddRow("Span", $"{model.TechnicalData.SpanMm:0} mm");
-        AddRow("Lift Height", $"{model.TechnicalData.LiftHeightMm:0} mm");
-        AddRow("Runway Width", $"{model.TechnicalData.RunwayWidthMm:0} mm");
-        AddRow("Hoist Position", $"{model.TechnicalData.HoistPositionMm:0} mm");
-        AddRow("Building Height", $"{model.TechnicalData.BuildingHeightMm:0} mm");
+        const double x = 810;
+        const double y = 58;
+        const double w = 355;
+        const double h = 498;
 
-        void AddRow(string label, string value)
+        // Table outer frame
+        graphics.DrawRectangle(new XPen(XColors.Black, 1.2 * scale), XBrushes.White, mapRect(x, y, w, h));
+
+        // Header bar
+        graphics.DrawRectangle(XPens.Black, new XSolidBrush(XColor.FromArgb(27, 79, 114)), mapRect(x, y, w, 22));
+        DrawText(graphics, "TECHNICAL SPECIFICATIONS", map(x + w / 2, y + 15), 10 * scale, XStringFormats.Center, true, XColors.White);
+
+        // Subheader status bar
+        graphics.DrawRectangle(XPens.Gray, new XSolidBrush(XColor.FromArgb(234, 242, 248)), mapRect(x, y + 22, w, 14));
+        DrawText(graphics, "STATUS: [USER INPUT] [DERIVED] [ESTIMATE] [PROTOTYPE] [REF]", map(x + 8, y + 32), 6.5 * scale, XStringFormats.TopLeft, true, XColor.FromArgb(21, 67, 96));
+
+        var specs = model.TechnicalData.Specifications;
+        const double rowH = 20;
+        var curY = y + 36;
+
+        for (var i = 0; i < specs.Count && curY + rowH < y + h - 30; i++)
         {
-            DrawText(graphics, label, map(x + 10, row), 9 * scale, XStringFormats.TopLeft);
-            DrawText(graphics, value, map(x + width - 10, row), 9 * scale, XStringFormats.TopRight);
-            row += 25;
+            var spec = specs[i];
+            var rowColor = i % 2 == 0 ? XColors.White : XColor.FromArgb(248, 249, 249);
+            graphics.DrawRectangle(new XPen(XColor.FromArgb(229, 231, 233), 0.5 * scale), new XSolidBrush(rowColor), mapRect(x, curY, w, rowH));
+
+            // Label
+            DrawText(graphics, spec.Label, map(x + 10, curY + 14), 7.8 * scale, XStringFormats.TopLeft, false, XColor.FromArgb(44, 62, 80));
+
+            // Value
+            DrawText(graphics, spec.Value, map(x + w - 82, curY + 14), 7.8 * scale, XStringFormats.TopRight, true, XColors.Black);
+
+            // Source tag
+            var tagColor = spec.Source switch
+            {
+                SpecificationSource.UserInput => XColor.FromArgb(17, 122, 101),
+                SpecificationSource.Derived => XColor.FromArgb(31, 97, 141),
+                SpecificationSource.Estimate => XColor.FromArgb(211, 84, 0),
+                SpecificationSource.PrototypeRule => XColor.FromArgb(142, 68, 173),
+                _ => XColor.FromArgb(85, 85, 85)
+            };
+            DrawText(graphics, spec.SourceTag, map(x + w - 8, curY + 14), 6.8 * scale, XStringFormats.TopRight, true, tagColor);
+
+            curY += rowH;
         }
+
+        // Table bottom warning note
+        graphics.DrawLine(new XPen(XColors.Black, 0.8 * scale), map(x, y + h - 30), map(x + w, y + h - 30));
+        DrawText(graphics, "* Values marked [ESTIMATE] or [PROTOTYPE] are reference defaults", map(x + 8, y + h - 18), 6.5 * scale, XStringFormats.TopLeft, false, XColor.FromArgb(183, 28, 28));
+        DrawText(graphics, "  for conceptual layout only and NOT certified engineering calculations.", map(x + 8, y + h - 8), 6.5 * scale, XStringFormats.TopLeft, false, XColor.FromArgb(183, 28, 28));
     }
 
-    private static void RenderTitleBlock(
+    private static void DrawText(
         XGraphics graphics,
-        DrawingModel model,
-        Func<double, double, XPoint> map,
-        Func<double, double, double, double, XRect> mapRect,
-        double scale)
+        string text,
+        XPoint point,
+        double fontSize,
+        XStringFormat format,
+        bool bold = false,
+        XColor? color = null)
     {
-        const double x = 50;
-        const double y = 650;
-        const double width = 1050;
-        const double height = 100;
-        graphics.DrawRectangle(new XPen(XColors.Black, 1.2), mapRect(x, y, width, height));
-        DrawText(graphics, "PARAMETRIC OVERHEAD CRANE", map(x + 20, y + 18), 14 * scale, XStringFormats.TopLeft, true);
-        DrawText(graphics, model.TechnicalData.Note, map(x + 20, y + 40), 12 * scale, XStringFormats.TopLeft, true);
-        DrawText(graphics, $"Drawing No: {model.DrawingNumber}", map(x + 20, y + 65), 10 * scale, XStringFormats.TopLeft);
-        DrawText(graphics, $"Scale: {model.Scale}", map(x + 400, y + 65), 10 * scale, XStringFormats.TopLeft);
-        DrawText(graphics, $"Revision: {model.TechnicalData.Revision}", map(x + 700, y + 65), 10 * scale, XStringFormats.TopLeft);
-        DrawText(graphics, DateTime.UtcNow.ToString("yyyy-MM-dd"), map(x + width - 15, y + 65), 10 * scale, XStringFormats.TopRight);
+        var fontStyle = bold ? XFontStyleEx.Bold : XFontStyleEx.Regular;
+        var font = new XFont("Liberation Sans", Math.Max(4.5, fontSize), fontStyle);
+        var brush = new XSolidBrush(color ?? XColors.Black);
+        graphics.DrawString(text, font, brush, point, format);
     }
 
-    private static void DrawText(XGraphics graphics, string? text, XPoint point, double size, XStringFormat format, bool bold = false)
+    private static XColor ParseColor(string hexColor)
     {
-        var font = new XFont("Arial", Math.Max(5, size), bold ? XFontStyleEx.Bold : XFontStyleEx.Regular);
-        graphics.DrawString(text ?? string.Empty, font, XBrushes.Black, point, format);
-    }
-
-    private static XColor ParseColor(string color)
-    {
-        try
-        {
-            return XColor.FromName(color);
-        }
-        catch
-        {
+        if (string.IsNullOrEmpty(hexColor) || hexColor == "#000000" || hexColor == "black")
             return XColors.Black;
+        if (hexColor == "#ffffff" || hexColor == "white")
+            return XColors.White;
+
+        if (hexColor.StartsWith("#"))
+            hexColor = hexColor[1..];
+
+        if (hexColor.Length == 6 && int.TryParse(hexColor, System.Globalization.NumberStyles.HexNumber, null, out var rgb))
+        {
+            var r = (byte)((rgb >> 16) & 0xFF);
+            var g = (byte)((rgb >> 8) & 0xFF);
+            var b = (byte)(rgb & 0xFF);
+            return XColor.FromArgb(r, g, b);
         }
+        return XColors.Black;
     }
 
     private static bool TryParseFill(string fill, out XBrush brush)
     {
-        if (string.IsNullOrWhiteSpace(fill) || string.Equals(fill, "none", StringComparison.OrdinalIgnoreCase))
-        {
-            brush = XBrushes.Transparent;
+        brush = default!;
+        if (string.IsNullOrEmpty(fill) || fill == "none")
             return false;
-        }
 
-        try
-        {
-            brush = new XSolidBrush(XColor.FromName(fill));
-            return true;
-        }
-        catch
-        {
-            brush = XBrushes.Transparent;
-            return false;
-        }
+        brush = new XSolidBrush(ParseColor(fill));
+        return true;
     }
 }

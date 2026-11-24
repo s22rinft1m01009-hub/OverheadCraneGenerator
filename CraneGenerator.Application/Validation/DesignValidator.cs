@@ -1,5 +1,7 @@
 using CraneGenerator.Application.DTOs;
 using CraneGenerator.Domain.Enums;
+using System;
+using System.Collections.Generic;
 
 namespace CraneGenerator.Application.Validation;
 
@@ -55,7 +57,7 @@ public static class DesignValidator
         }
         catch (ArgumentException)
         {
-            errors.Add("CraneType must be SINGLE_GIRDER_EOT, DOUBLE_GIRDER_EOT, or GANTRY.");
+            errors.Add("Unsupported crane type. Supported types: SINGLE_GIRDER_EOT, DOUBLE_GIRDER_EOT, GANTRY, JIB_CRANE, MONORAIL, WALL_MOUNTED_JIB, PORTABLE_GANTRY, SEMI_GANTRY, UNDERSLUNG.");
         }
 
         RequireFinitePositive(capacityTonnes, "CapacityTonnes", errors);
@@ -68,16 +70,14 @@ public static class DesignValidator
         if (spanMm > 0 && hoistPositionMm > spanMm)
             errors.Add("HoistPositionMm must be less than or equal to SpanMm.");
 
-        if (normalizedCraneType is CraneTypeNormalizer.SingleGirderEot or CraneTypeNormalizer.DoubleGirderEot
-            && runwayWidthMm <= 0)
+        // EOT and Underslung cranes operate on building runway beams and require runway width and building height
+        if (normalizedCraneType is CraneTypeNormalizer.SingleGirderEot or CraneTypeNormalizer.DoubleGirderEot or CraneTypeNormalizer.Underslung)
         {
-            errors.Add("RunwayWidthMm must be greater than zero for EOT cranes.");
-        }
+            if (runwayWidthMm <= 0)
+                errors.Add("RunwayWidthMm must be greater than zero for EOT and underslung cranes.");
 
-        if (normalizedCraneType is CraneTypeNormalizer.SingleGirderEot or CraneTypeNormalizer.DoubleGirderEot
-            && buildingHeightMm <= 0)
-        {
-            errors.Add("BuildingHeightMm must be greater than zero for EOT cranes.");
+            if (buildingHeightMm <= 0)
+                errors.Add("BuildingHeightMm must be greater than zero for EOT and underslung cranes.");
         }
 
         if (errors.Count > 0)

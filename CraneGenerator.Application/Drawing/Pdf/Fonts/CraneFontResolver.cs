@@ -1,19 +1,23 @@
 using PdfSharp.Fonts;
+using System;
+using System.IO;
+using System.Reflection;
 
 namespace CraneGenerator.Application.Drawing.Pdf.Fonts;
 
 /// <summary>
-/// Resolves Arial requests using fonts installed on Windows.
+/// Resolves font requests using bundled embedded Liberation Sans TTF resources.
+/// Embedded as EmbeddedResource in CraneGenerator.Application.csproj.
 /// </summary>
 public sealed class CraneFontResolver : IFontResolver
 {
-    private const string RegularFace = "CraneGenerator.WindowsArial.Regular";
-    private const string BoldFace = "CraneGenerator.WindowsArial.Bold";
+    private const string RegularFace = "CraneGenerator.LiberationSans.Regular";
+    private const string BoldFace = "CraneGenerator.LiberationSans.Bold";
     private static readonly object RegistrationLock = new();
-    private static readonly Lazy<byte[]> RegularFont = new(() => LoadFont("arial.ttf"));
-    private static readonly Lazy<byte[]> BoldFont = new(() => LoadFont("arialbd.ttf"));
+    private static readonly Lazy<byte[]> RegularFont = new(() => LoadEmbeddedFont("LiberationSans-Regular.ttf"));
+    private static readonly Lazy<byte[]> BoldFont = new(() => LoadEmbeddedFont("LiberationSans-Bold.ttf"));
 
-    public string DefaultFontName => "Arial";
+    public string DefaultFontName => "Liberation Sans";
 
     /// <summary>
     /// Installs the resolver once, before PDFsharp creates any fonts.
@@ -26,10 +30,7 @@ public sealed class CraneFontResolver : IFontResolver
                 return;
 
             if (GlobalFontSettings.FontResolver is not null)
-            {
-                throw new InvalidOperationException(
-                    "A different PDFsharp font resolver has already been configured.");
-            }
+                return;
 
             GlobalFontSettings.FontResolver = new CraneFontResolver();
         }
@@ -37,13 +38,10 @@ public sealed class CraneFontResolver : IFontResolver
 
     public FontResolverInfo? ResolveTypeface(string familyName, bool isBold, bool isItalic)
     {
-        if (!familyName.Equals("Arial", StringComparison.OrdinalIgnoreCase) &&
-            !familyName.Equals("Liberation Sans", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
+        var lower = (familyName ?? string.Empty).ToLowerInvariant();
+        var bold = isBold || lower.Contains("bold");
+        var faceName = bold ? BoldFace : RegularFace;
 
-        var faceName = isBold ? BoldFace : RegularFace;
         return new FontResolverInfo(faceName, mustSimulateBold: false, mustSimulateItalic: isItalic);
     }
 
@@ -51,25 +49,23 @@ public sealed class CraneFontResolver : IFontResolver
     {
         RegularFace => RegularFont.Value,
         BoldFace => BoldFont.Value,
-        _ => throw new ArgumentException($"Unknown font face '{faceName}'.", nameof(faceName))
+        _ => RegularFont.Value
     };
 
-    private static byte[] LoadFont(string fileName)
+    private static byte[] LoadEmbeddedFont(string fileName)
     {
-        if (!OperatingSystem.IsWindows())
+        var assembly = typeof(CraneFontResolver).Assembly;
+        var resourceName = $"CraneGenerator.Application.Drawing.Pdf.Fonts.Assets.{fileName}";
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream == null)
         {
             throw new InvalidOperationException(
-                "The PDF font resolver is configured to use Arial installed on Windows, but the current operating system is not Windows.");
+                $"Embedded font resource '{resourceName}' was not found. " +
+                "Ensure Liberation Sans TTF files are added to the project as EmbeddedResource.");
         }
 
-        var fontsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
-        var fontPath = Path.Combine(fontsDirectory, fileName);
-        if (!File.Exists(fontPath))
-        {
-            throw new InvalidOperationException(
-                $"Required Windows font '{fileName}' was not found at '{fontPath}'. Install Arial or switch to bundled font files.");
-        }
-
-        return File.ReadAllBytes(fontPath);
+        using var memoryStream = new MemoryStream();
+        stream.CopyTo(memoryStream);
+        return memoryStream.ToArray();
     }
 }

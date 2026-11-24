@@ -1,4 +1,4 @@
-﻿using CraneGenerator.Application.Drawing;
+using CraneGenerator.Application.Drawing;
 using CraneGenerator.Application.Drawing.Pdf;
 using CraneGenerator.Application.DTOs;
 using CraneGenerator.Application.Services;
@@ -29,6 +29,7 @@ namespace OverheadCraneGenerator.Controllers
             _pdfDrawingRenderer = pdfDrawingRenderer;
         }
 
+        [HttpGet]
         [HttpGet("getall")]
         public async Task<IActionResult> GetAll()
         {

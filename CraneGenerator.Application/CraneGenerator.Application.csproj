@@ -18,9 +18,13 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="PDFsharp" Version="6.2.2" />
+    <PackageReference Include="PDFsharp" Version="6.5.0" />
   </ItemGroup>
 
+  <!-- Embedded font resources: uncomment after adding LiberationSans-Regular.ttf and LiberationSans-Bold.ttf to Drawing/Pdf/Fonts/Assets/ -->
+	<ItemGroup>
+		<EmbeddedResource Include="Drawing\Pdf\Fonts\Assets\*.ttf" />
+	</ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CraneGenerator.Domain\CraneGenerator.Domain.csproj" />
     <ProjectReference Include="..\CraneGenerator.Infrastructure\CraneGenerator.Infrastructure.csproj" />
